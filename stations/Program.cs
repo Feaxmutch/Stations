@@ -55,6 +55,18 @@
         }
     }
 
+    static class PeoplesGenerator
+    {
+        private static int MinPeoples => 10;
+
+        private static int MaxPeoples => 500;
+
+        public static int GeneratePeoples()
+        {
+            return Utilits.GetRandomNumber(MinPeoples, MaxPeoples);
+        }
+    }
+
     class Configurator
     {
         private List<Station> _stations = new();
@@ -64,17 +76,11 @@
         {
             foreach (var station in stations)
             {
-                _stations.Add(station.Clone());
+                _stations.Add(station);
             }
 
             RemoveSimilarStations();
-            MinPeoples = 0;
-            MaxPeoples = 1080;
         }
-
-        private int MinPeoples { get; }
-
-        private int MaxPeoples { get; }
 
         public void Work()
         {
@@ -123,16 +129,9 @@
 
             foreach (var train in _trains)
             {
-                if (train.Destination.Position > train.Position)
-                {
-                    distance = train.Destination.Position - train.Position;
-                }
-                else
-                {
-                    distance = train.Position - train.Destination.Position;
-                }
-
-                peoplesCount = train.GetAllPeoplesCount();
+                Console.WriteLine();
+                distance = Math.Abs(train.Destination.Position - train.Position);
+                peoplesCount = train.CalculatePeoples();
                 startName = train.StartStation.Name;
                 endName = train.Destination.Name;
                 Console.WriteLine($"От станции \"{startName}\" до станции \"{endName}\" осталось {distance} шагов. Едет {peoplesCount} пассажиров");
@@ -151,6 +150,7 @@
         private void AddTrain()
         {
             bool isComplete = false;
+            int peoples = PeoplesGenerator.GeneratePeoples();
 
             Console.WriteLine("Станции:");
             ShowStations();
@@ -159,14 +159,9 @@
             {
                 if (TryGetEndNumber(startNumber, out int endNumber))
                 {
-                    int startPosition = _stations[startNumber - 1].Position;
-                    int destinationPosition = _stations[endNumber - 1].Position;
-                    string startName = _stations[startNumber - 1].Name;
-                    string destinationName = _stations[endNumber - 1].Name;
-                    Station startStation = new Station(startName, startPosition);
-                    Station Destination = new Station(destinationName, destinationPosition);
-                    Train newTrain = new(startStation, Destination);
-                    newTrain.TakePeoples(Utilits.GetRandomNumber(MinPeoples, MaxPeoples));
+                    Station start = _stations[startNumber - 1];
+                    Station destination = _stations[endNumber - 1];
+                    Train newTrain = new(start, destination, peoples);
                     _trains.Add(newTrain);
                     isComplete = true;
                 }
@@ -174,7 +169,7 @@
 
             if (isComplete)
             {
-                Console.WriteLine($"Поезд и маршрут для него созданы. На данный маршрут было продано {_trains[_trains.Count - 1].GetAllPeoplesCount()} билетов");
+                Console.WriteLine($"Поезд и маршрут для него созданы. На данный маршрут было продано {peoples} билетов");
             }
             else
             {
@@ -188,7 +183,7 @@
         {
             if (Utilits.TryGetNumberFromUser("Введите номер стартовой станции: ", out int number))
             {
-                if (StationNumberExists(number))
+                if (HaveStationNumber(number))
                 {
                     startNumber = number;
                     return true;
@@ -207,7 +202,7 @@
         {
             if (Utilits.TryGetNumberFromUser("Введите номер конечной станции: ", out int number))
             {
-                if (StationNumberExists(number))
+                if (HaveStationNumber(number))
                 {
                     if (number != startNumber)
                     {
@@ -229,7 +224,7 @@
             return false;
         }
 
-        private bool StationNumberExists(int number)
+        private bool HaveStationNumber(int number)
         {
             return number > 0 && number <= _stations.Count;
         }
@@ -250,7 +245,7 @@
         }
     }
 
-    class Station
+    struct Station
     {
         public Station(string name, int position)
         {
@@ -261,24 +256,18 @@
         public string Name { get; }
 
         public int Position { get; }
-
-        public Station Clone()
-        {
-            return new Station(Name, Position);
-        }
     }
 
     class Train
     {
         private List<Wagon> _wagons = new();
 
-        public Train(Station startStation, Station destination)
+        public Train(Station startStation, Station destination, int peoples)
         {
-            StartStation = new Station(startStation.Name, startStation.Position);
-            Destination = new Station(destination.Name, destination.Position);
+            StartStation = startStation;
+            Destination = destination;
             Position = StartStation.Position;
-            MinCapasity = 1;
-            MaxCapasity = 54;
+            TakePeoples(peoples);
         }
 
         public int Position { get; private set; }
@@ -287,19 +276,17 @@
 
         public Station Destination { get; }
 
-        public bool InDestination { get => Position == Destination.Position; }
+        public bool InDestination  => Position == Destination.Position;
 
-        private int MinCapasity { get; }
+        private static int MaxCapasity => 50;
 
-        private int MaxCapasity { get; }
-
-        public void TakePeoples(int quantity)
+        private void TakePeoples(int quantity)
         {
             while (quantity > 0)
             {
-                AddWagon(Utilits.GetRandomNumber(MinCapasity, MaxCapasity));
+                AddWagon(MaxCapasity);
                 Wagon lastWagon = _wagons[_wagons.Count - 1];
-                quantity = lastWagon.AddPeoples(quantity);
+                lastWagon.AddPeoples(ref quantity);
             }
         }
 
@@ -315,7 +302,7 @@
             }
         }
 
-        public int GetAllPeoplesCount()
+        public int CalculatePeoples()
         {
             int peoples = 0;
 
@@ -355,18 +342,17 @@
 
         public int FreePlaces => Сapacity - Peoples;
 
-        public int AddPeoples(int quantity)
+        public void AddPeoples(ref int quantity)
         {
             if (quantity > FreePlaces)
             {
                 quantity -= FreePlaces;
                 Peoples = Сapacity;
-                return quantity;
             }
             else
             {
-                Peoples += Math.Max(0, quantity);
-                return 0;
+                Peoples += quantity;
+                quantity = 0;
             }
         }
     }
