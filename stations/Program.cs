@@ -93,7 +93,8 @@
 
                 if (Console.ReadKey().Key == escapeKey)
                 {
-                    return;
+                    isWorking = false;
+                    continue;
                 }
 
                 Console.Clear();
@@ -130,10 +131,10 @@
             foreach (var train in _trains)
             {
                 Console.WriteLine();
-                distance = Math.Abs(train.Destination.Position - train.Position);
+                distance = Math.Abs(train.Path.End.Position - train.Position);
                 peoplesCount = train.CalculatePeoples();
-                startName = train.StartStation.Name;
-                endName = train.Destination.Name;
+                startName = train.Path.Start.Name;
+                endName = train.Path.End.Name;
                 Console.WriteLine($"От станции \"{startName}\" до станции \"{endName}\" осталось {distance} шагов. Едет {peoplesCount} пассажиров");
                 train.ShowWagonsInfo();
             }
@@ -150,26 +151,48 @@
         private void AddTrain()
         {
             bool isComplete = false;
+            bool stationsIsGeted = default;
             int peoples = PeoplesGenerator.GeneratePeoples();
+            int passengers = peoples;
 
             Console.WriteLine("Станции:");
             ShowStations();
+            stationsIsGeted = TryGetStationByNumber(out Station startStation);
+            stationsIsGeted = TryGetStationByNumber(out Station endStation) && stationsIsGeted;
 
-            if (TryGetStartNumber(out int startNumber))
+            if (stationsIsGeted)
             {
-                if (TryGetEndNumber(startNumber, out int endNumber))
+                if (startStation != endStation)
                 {
-                    Station start = _stations[startNumber - 1];
-                    Station destination = _stations[endNumber - 1];
-                    Train newTrain = new(start, destination, peoples);
+                    List<Wagon> wagons = new();
+
+                    if (Utilits.TryGetNumberFromUser("Введите вместимость вагона: ", out int capacity))
+                    {
+                        while (passengers > 0)
+                        {
+                            int enteredPassengers = Math.Min(capacity, passengers);
+                            Wagon nextWagon = new(enteredPassengers);
+                            nextWagon.AddPeoples(capacity);
+                            wagons.Add(nextWagon);
+                            passengers -= enteredPassengers;
+                        }
+                    }
+
+                    Path path = new(startStation, endStation);
+                    Train newTrain = new(path, wagons);
                     _trains.Add(newTrain);
                     isComplete = true;
+                }
+                else
+                {
+                    Console.WriteLine("Маршрут не допустим.\n" +
+                                      "Точка отправления и прибытия одинаковые.");
                 }
             }
 
             if (isComplete)
             {
-                Console.WriteLine($"Поезд и маршрут для него созданы. На данный маршрут было продано {peoples} билетов");
+                Console.WriteLine($"Поезд и маршрут для него созданы. На данный маршрут было продано {peoples} билетов.");
             }
             else
             {
@@ -179,13 +202,13 @@
             Console.ReadKey();
         }
 
-        private bool TryGetStartNumber(out int startNumber)
+        private bool TryGetStationByNumber(out Station station)
         {
-            if (Utilits.TryGetNumberFromUser("Введите номер стартовой станции: ", out int number))
+            if (Utilits.TryGetNumberFromUser("Введите номер станции: ", out int number))
             {
                 if (HaveStationNumber(number))
                 {
-                    startNumber = number;
+                    station = _stations[number - 1];
                     return true;
                 }
                 else
@@ -194,33 +217,7 @@
                 }
             }
 
-            startNumber = 0;
-            return false;
-        }
-
-        private bool TryGetEndNumber(int startNumber, out int endNumber)
-        {
-            if (Utilits.TryGetNumberFromUser("Введите номер конечной станции: ", out int number))
-            {
-                if (HaveStationNumber(number))
-                {
-                    if (number != startNumber)
-                    {
-                        endNumber = number;
-                        return true;
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Номер стартовой и конечной станции не должны совпадать.");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"Номера {number} нет в списке станций");
-                }
-            }
-
-            endNumber = 0;
+            station = new();
             return false;
         }
 
@@ -235,7 +232,7 @@
             {
                 for (int j = i - 1; j >= 0; j--)
                 {
-                    if (_stations[i].Position == _stations[j].Position)
+                    if (_stations[i] == _stations[j])
                     {
                         _stations.RemoveAt(i);
                         break;
@@ -256,47 +253,57 @@
         public string Name { get; }
 
         public int Position { get; }
+
+        public static bool operator ==(Station station1, Station station2)
+        {
+            bool equalsName = station1.Name == station2.Name;
+            bool equalsPosition = station1.Position == station2.Position;
+            return equalsName && equalsPosition;
+        }
+
+        public static bool operator !=(Station station1, Station station2)
+        {
+            return (station1 == station2) == false;
+        }
+    }
+
+    class Path
+    {
+        public Path(Station start, Station end)
+        {
+            Start = start;
+            End = end;
+        }
+
+        public Station Start { get; }
+
+        public Station End { get; }
     }
 
     class Train
     {
         private List<Wagon> _wagons = new();
 
-        public Train(Station startStation, Station destination, int peoples)
+        public Train(Path path, List<Wagon> wagons)
         {
-            StartStation = startStation;
-            Destination = destination;
-            Position = StartStation.Position;
-            TakePeoples(peoples);
+            _wagons = new(wagons);
+            Path = path;
+            Position = path.Start.Position;
         }
 
         public int Position { get; private set; }
 
-        public Station StartStation { get; }
+        public Path Path { get; }
 
-        public Station Destination { get; }
-
-        public bool InDestination  => Position == Destination.Position;
-
-        private static int MaxCapasity => 50;
-
-        private void TakePeoples(int quantity)
-        {
-            while (quantity > 0)
-            {
-                AddWagon(MaxCapasity);
-                Wagon lastWagon = _wagons[_wagons.Count - 1];
-                lastWagon.AddPeoples(ref quantity);
-            }
-        }
+        public bool InDestination  => Position == Path.End.Position;
 
         public void Move()
         {
-            if (Position < Destination.Position)
+            if (Position < Path.End.Position)
             {
                 Position++;
             }
-            else if (Position > Destination.Position)
+            else if (Position > Path.End.Position)
             {
                 Position--;
             }
@@ -321,11 +328,6 @@
                 Console.WriteLine($"вагоне {i + 1}, с размером на {_wagons[i].Сapacity} человек, находится {_wagons[i].Peoples} пассажиров");
             }
         }
-
-        private void AddWagon(int capasity)
-        {
-            _wagons.Add(new Wagon(capasity));
-        }
     }
 
     class Wagon
@@ -342,7 +344,7 @@
 
         public int FreePlaces => Сapacity - Peoples;
 
-        public void AddPeoples(ref int quantity)
+        public void AddPeoples(int quantity)
         {
             if (quantity > FreePlaces)
             {
