@@ -151,16 +151,16 @@
         private void AddTrain()
         {
             bool isComplete = false;
-            bool stationsIsGeted = default;
+            bool isStationsGeted = default;
             int peoples = PeoplesGenerator.GeneratePeoples();
             int passengers = peoples;
 
             Console.WriteLine("Станции:");
             ShowStations();
-            stationsIsGeted = TryGetStationByNumber(out Station startStation);
-            stationsIsGeted = TryGetStationByNumber(out Station endStation) && stationsIsGeted;
+            isStationsGeted = TryGetStationByNumber(out Station startStation);
+            isStationsGeted = TryGetStationByNumber(out Station endStation) && isStationsGeted;
 
-            if (stationsIsGeted)
+            if (isStationsGeted)
             {
                 if (startStation != endStation)
                 {
