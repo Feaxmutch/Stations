@@ -23,7 +23,7 @@
     {
         private static Random s_random = new Random();
 
-        public static bool TryGetNumberFromUser(string massage, out int parsedNumber)
+        public static bool TryGetNumberFromUser(string massage, out int parsedNumber, bool canBeNegative = true)
         {
             Console.Write(massage);
             string userInput = Console.ReadLine();
@@ -32,8 +32,15 @@
             {
                 if (int.TryParse(userInput, out int number))
                 {
-                    parsedNumber = number;
-                    return true;
+                    if (int.IsNegative(number) == false || canBeNegative)
+                    {
+                        parsedNumber = number;
+                        return true;
+                    }
+                    else
+                    {
+                        Console.WriteLine("Отрицательное число не допустимо.");
+                    }
                 }
                 else
                 {
@@ -55,15 +62,20 @@
         }
     }
 
-    static class PeoplesGenerator
+    class PeoplesFactory
     {
-        private static int MinPeoples => 10;
+        private int _minPeoples;
+        private int _maxPeoples;
 
-        private static int MaxPeoples => 500;
-
-        public static int GeneratePeoples()
+        public PeoplesFactory(int minPeoples, int maxPeoples)
         {
-            return Utilits.GetRandomNumber(MinPeoples, MaxPeoples);
+            _minPeoples = minPeoples;
+            _maxPeoples = maxPeoples;
+        }
+
+        public int CreatePeoples()
+        {
+            return Utilits.GetRandomNumber(_minPeoples, _maxPeoples);
         }
     }
 
@@ -98,24 +110,15 @@
                 }
 
                 Console.Clear();
-
-                for (int i = _trains.Count - 1; i >= 0; i--)
-                {
-                    if (_trains[i].InDestination)
-                    {
-                        _trains.RemoveAt(i);
-                    }
-                }
-
+                RemoveTrainsInDestination();
                 ShowTrains();
                 Console.WriteLine();
+                MoveTrains();
 
-                foreach (var train in _trains)
+                if (TryCreateTrain(out Train train))
                 {
-                    train.Move();
+                    _trains.Add(train);
                 }
-
-                AddTrain();
             }
         }
 
@@ -140,6 +143,25 @@
             }
         }
 
+        private void MoveTrains()
+        {
+            foreach (var train in _trains)
+            {
+                train.Move();
+            }
+        }
+
+        private void RemoveTrainsInDestination()
+        {
+            for (int i = _trains.Count - 1; i >= 0; i--)
+            {
+                if (_trains[i].InDestination)
+                {
+                    _trains.RemoveAt(i);
+                }
+            }
+        }
+
         private void ShowStations()
         {
             for (int i = 0; i < _stations.Count; i++)
@@ -148,12 +170,32 @@
             }
         }
 
-        private void AddTrain()
+        private bool TryCreateTrain(out Train train)
         {
-            bool isComplete = false;
+            train = default;
+            bool isPatchCreated = TryCreatePath(out Path path);
+            int passengers = new PeoplesFactory(10, 500).CreatePeoples();
+
+            if (isPatchCreated)
+            {
+                List<Wagon> wagons = BoardPassengers(passengers);
+                train = new(path, wagons);
+                Console.WriteLine($"Поезд и маршрут для него созданы. На данный маршрут было продано {passengers} билетов.");
+            }
+            else
+            {
+                Console.WriteLine("Поезд не создан.");
+            }
+
+            Console.ReadKey();
+            return isPatchCreated;
+        }
+
+        private bool TryCreatePath(out Path path)
+        {
+            path = default;
             bool isStationsGeted = default;
-            int peoples = PeoplesGenerator.GeneratePeoples();
-            int passengers = peoples;
+            bool isSuccessfull = default;
 
             Console.WriteLine("Станции:");
             ShowStations();
@@ -164,24 +206,8 @@
             {
                 if (startStation != endStation)
                 {
-                    List<Wagon> wagons = new();
-
-                    if (Utilits.TryGetNumberFromUser("Введите вместимость вагона: ", out int capacity))
-                    {
-                        while (passengers > 0)
-                        {
-                            int enteredPassengers = Math.Min(capacity, passengers);
-                            Wagon nextWagon = new(enteredPassengers);
-                            nextWagon.AddPeoples(capacity);
-                            wagons.Add(nextWagon);
-                            passengers -= enteredPassengers;
-                        }
-                    }
-
-                    Path path = new(startStation, endStation);
-                    Train newTrain = new(path, wagons);
-                    _trains.Add(newTrain);
-                    isComplete = true;
+                    path = new(startStation, endStation);
+                    isSuccessfull = true;
                 }
                 else
                 {
@@ -190,16 +216,38 @@
                 }
             }
 
-            if (isComplete)
+            return isSuccessfull;
+        }
+
+        private List<Wagon> BoardPassengers(int passengers)
+        {
+            int capacity = default;
+            bool isCorrectCapacity = default;
+            List<Wagon> wagons = new();
+
+            while (isCorrectCapacity == false)
             {
-                Console.WriteLine($"Поезд и маршрут для него созданы. На данный маршрут было продано {peoples} билетов.");
-            }
-            else
-            {
-                Console.WriteLine("Поезд не создан.");
+                if (Utilits.TryGetNumberFromUser("Введите вместимость вагона: ", out capacity, false))
+                {
+                    if (capacity == 0)
+                    {
+                        Console.WriteLine("Вместимость вагона не может быть равна 0");
+                    }
+
+                    isCorrectCapacity = capacity > 0;
+                }
             }
 
-            Console.ReadKey();
+            while (passengers > 0)
+            {
+                int enteredPassengers = Math.Min(capacity, passengers);
+                Wagon nextWagon = new(capacity);
+                nextWagon.AddPeoples(enteredPassengers);
+                wagons.Add(nextWagon);
+                passengers -= enteredPassengers;
+            }
+
+            return wagons;
         }
 
         private bool TryGetStationByNumber(out Station station)
@@ -295,7 +343,7 @@
 
         public Path Path { get; }
 
-        public bool InDestination  => Position == Path.End.Position;
+        public bool InDestination => Position == Path.End.Position;
 
         public void Move()
         {
